@@ -1,0 +1,22 @@
+{
+  "mainnet": {
+    "name": "Pharos Mainnet",
+    "alias": "pacific-ocean",
+    "rpc": "https://rpc.pharos.xyz",
+    "chainId": 1672,
+    "symbol": "PROS",
+    "explorer": "https://www.pharosscan.xyz",
+    "explorerTx": "https://www.pharosscan.xyz/tx",
+    "explorerAddress": "https://www.pharosscan.xyz/address"
+  },
+  "testnet": {
+    "name": "Atlantic Testnet",
+    "alias": "atlantic-testnet",
+    "rpc": "https://atlantic.dplabs-internal.com",
+    "chainId": 688689,
+    "symbol": "PHRS",
+    "explorer": "https://atlantic.pharosscan.xyz",
+    "explorerTx": "https://atlantic.pharosscan.xyz/tx",
+    "explorerAddress": "https://atlantic.pharosscan.xyz/address"
+  }
+}

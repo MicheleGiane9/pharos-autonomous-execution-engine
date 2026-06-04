@@ -1,0 +1,42 @@
+{
+  "mainnet": [
+    {
+      "name": "Faroswap",
+      "contract_name": "DODOFeeRouteProxy",
+      "protocol": "DODO V2",
+      "type": "aggregator_proxy",
+      "router": "0xa5ca5fbe34e444f366b373170541ec6902b0f75c",
+      "network": "mainnet",
+      "rpc": "https://rpc.pharos.xyz",
+      "chainId": 1672,
+      "tokens": ["WPROS", "USDC", "USDC.e", "LINK"],
+      "pools": {
+        "WPROS/USDC": {
+          "address": "0x912c9ade24d44d8922f0866d8dcb079f1363f647",
+          "type": "AMM V3",
+          "fee": "0.01%",
+          "tvl": "$501K",
+          "token0": "0x52C48d4213107b20bC583832b0d951FB9CA8F0B0",
+          "token1": "0xC879C018dB60520F4355C26eD1a6D572cdAC1815",
+          "token0_symbol": "WPROS",
+          "token1_symbol": "USDC"
+        }
+      },
+      "note": "Verified on pharosscan.xyz. Uses DODO protocol — NOT Uniswap V2. Routes through AMM V3 pools."
+    }
+  ],
+  "testnet": [
+    {
+      "name": "Faroswap (Testnet)",
+      "contract_name": "DODOFeeRouteProxy",
+      "protocol": "DODO V2",
+      "type": "aggregator_proxy",
+      "router": "PENDING — find on atlantic.pharosscan.xyz",
+      "network": "testnet",
+      "rpc": "https://atlantic.dplabs-internal.com",
+      "chainId": 688689,
+      "tokens": ["PHRS", "USDC"],
+      "note": "Testnet router address not yet confirmed. Use mainnet config for reference."
+    }
+  ]
+}
