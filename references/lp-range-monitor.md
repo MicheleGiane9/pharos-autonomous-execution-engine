@@ -42,18 +42,47 @@ cast call 0x912c9ade24d44d8922f0866d8dcb079f1363f647 \
 
 ## Step 2 — Get LP Position Range
 
-If user has an NFT position, read tickLower and tickUpper:
+### Option A — Auto-detect (if Position Manager address is known)
 
 ```bash
-# Get position details from NFT Position Manager
+# Step 2a: Count how many LP positions this wallet has
+cast call <nft_position_manager> \
+  "balanceOf(address)(uint256)" \
+  <wallet_address> \
+  --rpc-url https://rpc.pharos.xyz
+
+# Step 2b: Get each position token ID
+cast call <nft_position_manager> \
+  "tokenOfOwnerByIndex(address,uint256)(uint256)" \
+  <wallet_address> <index> \
+  --rpc-url https://rpc.pharos.xyz
+
+# Step 2c: Read position data (tickLower=6th, tickUpper=7th value)
 cast call <nft_position_manager> \
   "positions(uint256)(uint96,address,address,address,uint24,int24,int24,uint128,uint256,uint256,uint128,uint128)" \
   <token_id> \
   --rpc-url https://rpc.pharos.xyz
-# Returns: ..., tickLower (6th value), tickUpper (7th value), liquidity (8th value), ...
 ```
 
-If user provides tickLower and tickUpper directly, skip this step.
+**Pharos Position Manager:** Check `assets/dexs.json` for current address.
+If not set, fall back to Option B.
+
+### Option B — User provides range (fallback)
+
+If Position Manager is not found, ask the user:
+> "What is the min and max price of your LP range? (Find it in Faroswap → Pool → your position)"
+
+Convert prices to ticks:
+```
+tickLower = round( log(minPrice / 10^12) / log(1.0001) )
+tickUpper = round( log(maxPrice / 10^12) / log(1.0001) )
+```
+
+**Example:**
+```
+minPrice = $0.322535  →  tickLower = -287640
+maxPrice = $1.289674  →  tickUpper = -273780
+```
 
 ---
 

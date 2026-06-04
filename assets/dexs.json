@@ -11,11 +11,21 @@
       "chainId": 1672,
       "tokens": ["WPROS", "USDC", "USDC.e", "LINK"],
       "pools": {
-        "WPROS/USDC": {
+        "WPROS/USDC-001": {
           "address": "0x912c9ade24d44d8922f0866d8dcb079f1363f647",
           "type": "AMM V3",
           "fee": "0.01%",
           "tvl": "$501K",
+          "token0": "0x52C48d4213107b20bC583832b0d951FB9CA8F0B0",
+          "token1": "0xC879C018dB60520F4355C26eD1a6D572cdAC1815",
+          "token0_symbol": "WPROS",
+          "token1_symbol": "USDC"
+        },
+        "WPROS/USDC-030": {
+          "address": "0x4146d192da6428c9e1c243d2a953c625b5765623",
+          "type": "AMM V3",
+          "fee": "0.30%",
+          "tvl": "$174K",
           "token0": "0x52C48d4213107b20bC583832b0d951FB9CA8F0B0",
           "token1": "0xC879C018dB60520F4355C26eD1a6D572cdAC1815",
           "token0_symbol": "WPROS",
