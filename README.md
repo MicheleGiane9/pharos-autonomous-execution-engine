@@ -100,12 +100,15 @@ Expected output:
 ## Use with Claude Code (AI agent mode)
 
 ```bash
-# Step 1 — Install base skill engine
-npx skills add https://github.com/PharosNetwork/pharos-skill-engine
-
-# Step 2 — Install this skill
+# Install this skill (standalone — no other dependency needed)
 npx skills add https://github.com/MicheleGiane9/pharos-autonomous-execution-engine
 ```
+
+> **Optional:** Install the Pharos base skill engine if you also want
+> native `cast`/`forge` commands for deploying contracts:
+> ```bash
+> npx skills add https://github.com/PharosNetwork/pharos-skill-engine
+> ```
 
 Then open Claude Code and just talk:
 
