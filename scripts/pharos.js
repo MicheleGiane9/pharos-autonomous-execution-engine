@@ -187,6 +187,8 @@ async function cmdLpMonitor(_wallet, minPrice, maxPrice, pool = "pool_030") {
 const BRIDGE_CHAINS = {
   base:     { id: "8453",  name: "Base",     usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
   arbitrum: { id: "42161", name: "Arbitrum", usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" },
+  polygon:  { id: "137",   name: "Polygon",  usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" },
+  bnb:      { id: "56",    name: "BNB Chain",usdc: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d" },
   ethereum: { id: "1",     name: "Ethereum", usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" },
 };
 
@@ -233,53 +235,66 @@ async function cmdBridge(amountPROS = 1) {
 // ─── Compare Faroswap vs Jumper ─────────────────────────────────────────────
 
 async function cmdCompare(amountPROS = 1) {
-  console.log("\n=======================================");
-  console.log("  SWAP COMPARISON — Faroswap vs Jumper");
-  console.log(`  ${amountPROS} PROS → USDC`);
-  console.log("=======================================\n");
+  console.log("\n=================================================");
+  console.log("  BEST EXECUTION — Faroswap vs Jumper");
+  console.log(`  Converting ${amountPROS} PROS → USDC`);
+  console.log("=================================================\n");
 
-  // Faroswap price (onchain, instant)
-  const { price } = await getPoolSlot0(CONTRACTS.pool_001);
-  const faroOut = (amountPROS * price).toFixed(4);
-  const gas = await getGasPrice();
+  // Both Faroswap pools
+  const [slot1, slot2] = await Promise.all([
+    getPoolSlot0(CONTRACTS.pool_001),
+    getPoolSlot0(CONTRACTS.pool_030)
+  ]);
+  const faro001Out = amountPROS * slot1.price;
+  const faro030Out = amountPROS * slot2.price;
+  const bestFaro   = faro001Out >= faro030Out
+    ? { out: faro001Out, fee: "0.01%", pool: "pool_001" }
+    : { out: faro030Out, fee: "0.30%", pool: "pool_030" };
 
-  console.log("  FAROSWAP (stays on Pharos)");
-  console.log(`  ${amountPROS} PROS → ${faroOut} USDC`);
-  console.log(`  Time: instant  | Gas: ~$0.001 | Network: Pharos\n`);
+  console.log("  FAROSWAP — Onchain (stays on Pharos)");
+  console.log(`  Pool 0.01%   ${faro001Out.toFixed(4)} USDC  instant  gas ~$0.001${faro001Out >= faro030Out ? "  ← best onchain" : ""}`);
+  console.log(`  Pool 0.30%   ${faro030Out.toFixed(4)} USDC  instant  gas ~$0.001${faro030Out >  faro001Out ? "  ← best onchain" : ""}`);
 
-  console.log("  JUMPER BRIDGE (moves to other chain)");
+  console.log("\n  JUMPER BRIDGE — Cross-chain (moves to other network)");
 
-  const results = [];
+  const bridgeResults = [];
   for (const [key, chain] of Object.entries(BRIDGE_CHAINS)) {
     try {
       const data = await getBridgeQuote(key, amountPROS);
       if (data?.estimate) {
-        const out    = (data.estimate.toAmount / 1e6).toFixed(4);
-        const time   = data.estimate.executionDuration;
-        const gasCost= data.estimate.gasCosts?.[0]?.amountUSD || "?";
-        const bridge = data.toolDetails?.name || "?";
-        results.push({ chain: chain.name, out: parseFloat(out), time, gasCost, bridge });
-        console.log(`  ${chain.name.padEnd(10)} ${out} USDC | ${String(time).padStart(5)}s | gas $${gasCost} | ${bridge}`);
+        const out     = parseFloat((data.estimate.toAmount / 1e6).toFixed(4));
+        const time    = data.estimate.executionDuration;
+        const gasCost = data.estimate.gasCosts?.[0]?.amountUSD || "?";
+        const bridge  = data.toolDetails?.name || "?";
+        bridgeResults.push({ chain: chain.name, out, time, gasCost, bridge });
+        console.log(`  ${chain.name.padEnd(10)}  ${out.toFixed(4)} USDC  ${String(time).padStart(5)}s   gas $${gasCost}  ${bridge}`);
       }
     } catch (_) {}
     await new Promise(r => setTimeout(r, 300));
   }
 
-  // Best option
-  const bestBridge = results.sort((a,b) => b.out - a.out)[0];
-  const faroFloat  = parseFloat(faroOut);
-  const best = faroFloat >= (bestBridge?.out || 0) ? "FAROSWAP" : `JUMPER → ${bestBridge?.chain}`;
-  const diff = Math.abs(faroFloat - (bestBridge?.out || 0)).toFixed(4);
+  // Final verdict
+  const bestBridge = bridgeResults.sort((a, b) => b.out - a.out)[0];
+  const allOptions = [
+    { name: `Faroswap ${bestFaro.fee}`, out: bestFaro.out, instant: true },
+    ...(bestBridge ? [{ name: `Jumper → ${bestBridge.chain}`, out: bestBridge.out, instant: false }] : [])
+  ].sort((a, b) => b.out - a.out);
 
-  console.log("\n  ─────────────────────────────────────");
-  console.log(`  BEST PRICE:  ${best}`);
-  console.log(`  DIFFERENCE:  ${diff} USDC`);
-  if (best === "FAROSWAP") {
-    console.log("  VERDICT: Stay on Pharos — better rate + instant + cheaper gas");
+  const winner = allOptions[0];
+  const diff   = (allOptions[0].out - allOptions[allOptions.length - 1].out).toFixed(4);
+
+  console.log("\n  ───────────────────────────────────────────────");
+  console.log(`  BEST PRICE:   ${winner.name}`);
+  console.log(`  YOU RECEIVE:  ${winner.out.toFixed(4)} USDC`);
+  console.log(`  DIFFERENCE:   ${diff} USDC vs worst option`);
+
+  if (winner.instant) {
+    console.log("  VERDICT:      Stay on Pharos — best rate + instant + cheapest gas");
   } else {
-    console.log("  VERDICT: Bridge to " + bestBridge?.chain + " for better rate");
+    const timeMins = Math.round((bestBridge?.time || 0) / 60);
+    console.log(`  VERDICT:      Bridge to ${bestBridge?.chain} for best rate (+${diff} USDC, ~${timeMins} min)`);
   }
-  console.log("=======================================\n");
+  console.log("=================================================\n");
 }
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
