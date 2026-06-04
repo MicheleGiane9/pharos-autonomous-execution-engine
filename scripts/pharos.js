@@ -297,23 +297,191 @@ async function cmdCompare(amountPROS = 1) {
   console.log("=================================================\n");
 }
 
+// ─── Swap via Faroswap SwapRouter ────────────────────────────────────────────
+
+const SWAP_ROUTER = "0xf38d34c8382b9079b0f85309578b43b8479Cd875";
+
+const TOKEN_INFO = {
+  WPROS:  { address: CONTRACTS.wpros, decimals: 18, symbol: "WPROS" },
+  USDC:   { address: CONTRACTS.usdc,  decimals: 6,  symbol: "USDC"  },
+};
+
+const POOL_FEES = { WPROS_USDC_001: 100, WPROS_USDC_030: 3000 };
+
+async function cmdSwap(amountStr, fromSymbol = "WPROS", toSymbol = "USDC", slippagePct = 0.5) {
+  const amount = parseFloat(amountStr);
+  if (!amount || amount <= 0) { console.log("ERROR: Invalid amount"); return; }
+
+  const from = TOKEN_INFO[fromSymbol.toUpperCase()];
+  const to   = TOKEN_INFO[toSymbol.toUpperCase()];
+  if (!from || !to || from === to) {
+    console.log("Supported: WPROS, USDC");
+    return;
+  }
+
+  // ── Pre-execution analysis ──────────────────────────────────────────────────
+  const [slot1, slot2] = await Promise.all([
+    getPoolSlot0(CONTRACTS.pool_001),
+    getPoolSlot0(CONTRACTS.pool_030),
+  ]);
+  const price        = slot1.price;
+  const price030     = slot2.price;
+  const gas          = await getGasPrice();
+
+  let estimatedOut, poolFee, poolLabel;
+  if (fromSymbol.toUpperCase() === "WPROS") {
+    const out001 = amount * price;
+    const out030 = amount * price030;
+    if (out001 >= out030) {
+      estimatedOut = out001; poolFee = 100; poolLabel = "0.01%";
+    } else {
+      estimatedOut = out030; poolFee = 3000; poolLabel = "0.30%";
+    }
+  } else {
+    // USDC -> WPROS
+    const out001 = amount / price;
+    const out030 = amount / price030;
+    if (out001 >= out030) {
+      estimatedOut = out001; poolFee = 100; poolLabel = "0.01%";
+    } else {
+      estimatedOut = out030; poolFee = 3000; poolLabel = "0.30%";
+    }
+  }
+
+  const minOut = estimatedOut * (1 - slippagePct / 100);
+
+  // Risk score (simple heuristic)
+  const riskScore = gas > 50 ? 7 : gas > 20 ? 4 : 2;
+  const riskLabel = riskScore >= 7 ? "HIGH ⚠️" : riskScore >= 4 ? "MEDIUM" : "LOW ✅";
+
+  console.log("\n=================================================");
+  console.log("  PRE-EXECUTION ANALYSIS — Pharos Network");
+  console.log("=================================================");
+  console.log(`  Action:      Swap ${amount} ${fromSymbol} → ${toSymbol}`);
+  console.log(`  Best route:  Faroswap pool ${poolLabel}`);
+  console.log(`  Est. output: ~${estimatedOut.toFixed(4)} ${toSymbol}`);
+  console.log(`  Min output:  ${minOut.toFixed(4)} ${toSymbol} (${slippagePct}% slippage)`);
+  console.log(`  Gas price:   ${gas} gwei`);
+  console.log(`  Risk score:  ${riskScore}/10 — ${riskLabel}`);
+  console.log("=================================================\n");
+
+  if (riskScore >= 8) {
+    console.log("  ⚠️  HIGH RISK: gas price is elevated. Aborting for safety.");
+    console.log("  Set PHAROS_FORCE=1 to override.\n");
+    if (!process.env.PHAROS_FORCE) return;
+  }
+
+  // ── Require ethers + key for execution ─────────────────────────────────────
+  let ethers;
+  try { ethers = require("ethers"); }
+  catch (_) {
+    console.log("  To execute: npm install ethers  then set PRIVATE_KEY\n");
+    return;
+  }
+
+  const privateKey = process.env.PRIVATE_KEY;
+  if (!privateKey) {
+    console.log("  To execute this swap, set your private key:");
+    console.log("    export PRIVATE_KEY=0x...");
+    console.log(`    node scripts/pharos.js swap ${amountStr} ${fromSymbol} ${toSymbol}`);
+    console.log("=================================================\n");
+    return;
+  }
+
+  // ── Execute ─────────────────────────────────────────────────────────────────
+  const provider = new ethers.JsonRpcProvider(NETWORKS.mainnet.rpc);
+  const wallet   = new ethers.Wallet(privateKey, provider);
+  const addr     = wallet.address;
+
+  const erc20Abi = [
+    "function balanceOf(address) view returns (uint256)",
+    "function allowance(address,address) view returns (uint256)",
+    "function approve(address,uint256) returns (bool)",
+  ];
+  const fromContract = new ethers.Contract(from.address, erc20Abi, wallet);
+
+  const balance   = await fromContract.balanceOf(addr);
+  const amountIn  = ethers.parseUnits(amount.toString(), from.decimals);
+  const amountMin = ethers.parseUnits(minOut.toFixed(to.decimals), to.decimals);
+
+  console.log(`  Wallet:    ${addr.slice(0,10)}...${addr.slice(-6)}`);
+  console.log(`  Balance:   ${ethers.formatUnits(balance, from.decimals)} ${fromSymbol}`);
+
+  if (balance < amountIn) {
+    console.log(`\n  ERROR: Insufficient balance. Need ${amount} ${fromSymbol}, have ${ethers.formatUnits(balance, from.decimals)}.`);
+    return;
+  }
+
+  // Step 1 — Approve if needed
+  const allowance = await fromContract.allowance(addr, SWAP_ROUTER);
+  if (allowance < amountIn) {
+    console.log("\n  Step 1/2: Approving SwapRouter to spend " + fromSymbol + "...");
+    const approveTx = await fromContract.approve(SWAP_ROUTER, amountIn);
+    console.log("  TX:        " + approveTx.hash);
+    await approveTx.wait();
+    console.log("  Approved   ✅");
+  } else {
+    console.log("  Allowance  ✅ (already approved)");
+  }
+
+  // Step 2 — Execute swap
+  const routerAbi = [
+    "function exactInputSingle((address tokenIn,address tokenOut,uint24 fee,address recipient,uint256 deadline,uint256 amountIn,uint256 amountOutMinimum,uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)",
+  ];
+  const router   = new ethers.Contract(SWAP_ROUTER, routerAbi, wallet);
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+  console.log("\n  Step 2/2: Executing swap...");
+  const swapTx = await router.exactInputSingle({
+    tokenIn:              from.address,
+    tokenOut:             to.address,
+    fee:                  poolFee,
+    recipient:            addr,
+    deadline,
+    amountIn,
+    amountOutMinimum:     amountMin,
+    sqrtPriceLimitX96:    0n,
+  });
+
+  console.log("  TX hash:   " + swapTx.hash);
+  console.log("  Pharosscan: https://pharosscan.xyz/tx/" + swapTx.hash);
+  const receipt = await swapTx.wait();
+
+  console.log("\n=================================================");
+  if (receipt.status === 1) {
+    console.log("  SWAP SUCCESS ✅");
+    console.log(`  Sold:      ${amount} ${fromSymbol}`);
+    console.log(`  Received:  ~${estimatedOut.toFixed(4)} ${toSymbol}`);
+  } else {
+    console.log("  SWAP FAILED ❌");
+  }
+  console.log(`  Gas used:  ${receipt.gasUsed.toString()}`);
+  console.log(`  TX:        ${swapTx.hash}`);
+  console.log("=================================================\n");
+}
+
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const [,, cmd, ...args] = process.argv;
 
 (async () => {
   try {
-    if (cmd === "price")   await cmdPrice();
+    if (cmd === "price")        await cmdPrice();
     else if (cmd === "wallet")  await cmdWallet(args[0]);
     else if (cmd === "lp")      await cmdLpMonitor(args[0], parseFloat(args[1]), parseFloat(args[2]));
     else if (cmd === "bridge")  await cmdBridge(parseFloat(args[0]) || 1);
     else if (cmd === "compare") await cmdCompare(parseFloat(args[0]) || 1);
+    else if (cmd === "swap")    await cmdSwap(args[0], args[1] || "WPROS", args[2] || "USDC", parseFloat(args[3]) || 0.5);
     else {
       console.log("Usage:");
-      console.log("  node pharos.js price");
-      console.log("  node pharos.js wallet <address>");
-      console.log("  node pharos.js lp <address> <minPrice> <maxPrice>");
-      console.log("  node pharos.js bridge <amountPROS>");
+      console.log("  node scripts/pharos.js price");
+      console.log("  node scripts/pharos.js wallet <address>");
+      console.log("  node scripts/pharos.js lp <address> <minPrice> <maxPrice>");
+      console.log("  node scripts/pharos.js bridge <amountPROS>");
+      console.log("  node scripts/pharos.js compare <amountPROS>");
+      console.log("  node scripts/pharos.js swap <amount> <fromToken> <toToken> [slippage%]");
+      console.log("    Example: node scripts/pharos.js swap 10 WPROS USDC 0.5");
+      console.log("    Requires: PRIVATE_KEY env var");
     }
   } catch (e) {
     console.error("Error:", e.message);

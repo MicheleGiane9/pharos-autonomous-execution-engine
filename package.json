@@ -1,0 +1,24 @@
+{
+  "name": "pharos-autonomous-execution-engine",
+  "version": "1.0.0",
+  "description": "> Intelligent execution layer for AI agents on Pharos Network.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MicheleGiane9/pharos-autonomous-execution-engine.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/MicheleGiane9/pharos-autonomous-execution-engine/issues"
+  },
+  "homepage": "https://github.com/MicheleGiane9/pharos-autonomous-execution-engine#readme",
+  "dependencies": {
+    "ethers": "^6.16.0"
+  }
+}
