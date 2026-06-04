@@ -56,24 +56,25 @@ Expected output:
 node scripts/pharos.js lp 0xYOUR_WALLET_ADDRESS MIN_PRICE MAX_PRICE
 ```
 
-**Compare Faroswap vs Jumper (best option to convert PROS):**
+**Compare both Faroswap pools vs Jumper (5 chains):**
 ```bash
 node scripts/pharos.js compare 40
 ```
 Expected output:
 ```
-  FAROSWAP (stays on Pharos)
-  40 PROS → 25.15 USDC
-  Time: instant  | Gas: ~$0.001 | Network: Pharos
+  FAROSWAP — Onchain (stays on Pharos)
+  Pool 0.01%   24.33 USDC  instant  gas ~$0.001  ← best onchain
+  Pool 0.30%   24.27 USDC  instant  gas ~$0.001
 
-  JUMPER BRIDGE (moves to other chain)
-  Base       25.19 USDC | 1080s | gas $0.006 | Polymer (Standard)
-  Arbitrum   25.19 USDC | 1080s | gas $0.006 | Polymer (Standard)
-  Ethereum   25.19 USDC | 1080s | gas $0.006 | Polymer (Standard)
+  JUMPER BRIDGE — Cross-chain (moves to other network)
+  Base        24.30 USDC   1080s   gas $0.006  Polymer (Standard)
+  Arbitrum    24.30 USDC   1080s   gas $0.006  Polymer (Standard)
+  Polygon     24.30 USDC   1080s   gas $0.006  Polymer (Standard)
+  Ethereum    24.30 USDC   1080s   gas $0.006  Polymer (Standard)
 
-  BEST PRICE:  JUMPER → Base
-  DIFFERENCE:  0.04 USDC
-  VERDICT: Bridge to Base for better rate
+  BEST PRICE:   Faroswap 0.01%
+  YOU RECEIVE:  24.33 USDC
+  VERDICT:      Stay on Pharos — best rate + instant + cheapest gas
 ```
 
 **Bridge only (Jumper routes):**
@@ -144,7 +145,17 @@ Then open Claude Code and just talk:
 
 ---
 
-## Skill modules
+## Commands (Node.js — no install needed)
+
+| Command | What it does |
+|---------|-------------|
+| `node scripts/pharos.js price` | Live WPROS/USDC price from Faroswap |
+| `node scripts/pharos.js wallet <addr>` | Balances + total portfolio value in USD |
+| `node scripts/pharos.js lp <addr> <min> <max>` | LP range status + out-of-range alerts |
+| `node scripts/pharos.js compare <amount>` | Faroswap (2 pools) vs Jumper (5 chains) — best verdict |
+| `node scripts/pharos.js bridge <amount>` | Bridge routes via Jumper across 5 chains |
+
+## Skill modules (Claude Code)
 
 | Module | Reference | Description |
 |--------|-----------|-------------|
