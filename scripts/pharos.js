@@ -5,6 +5,22 @@
  * No Foundry, no npm install needed.
  */
 
+// Load .env file if present (PRIVATE_KEY=0x... on first line)
+// NEVER type your private key in a chat or share it with anyone.
+// Store it only in a local .env file that is gitignored.
+(function loadEnv() {
+  const fs = require("fs");
+  const path = require("path");
+  const envPath = path.join(__dirname, "..", ".env");
+  if (fs.existsSync(envPath)) {
+    const lines = fs.readFileSync(envPath, "utf8").split("\n");
+    for (const line of lines) {
+      const match = line.match(/^([A-Z_]+)\s*=\s*(.+)$/);
+      if (match) process.env[match[1]] = match[2].trim();
+    }
+  }
+})();
+
 const NETWORKS = {
   mainnet: { rpc: "https://rpc.pharos.xyz", chainId: 1672, symbol: "PROS" },
   testnet: { rpc: "https://atlantic.dplabs-internal.com", chainId: 688689, symbol: "PHRS" }
@@ -473,9 +489,12 @@ async function cmdSwap(amountStr, fromSymbol = "WPROS", toSymbol = "USDC", slipp
 
   const privateKey = process.env.PRIVATE_KEY;
   if (!privateKey) {
-    console.log("  To execute this swap, set your private key:");
-    console.log("    export PRIVATE_KEY=0x...");
-    console.log(`    node scripts/pharos.js swap ${amountStr} ${fromSymbol} ${toSymbol}`);
+    console.log("\n  ── HOW TO EXECUTE ────────────────────────────");
+    console.log("  Create a .env file in the project root:");
+    console.log("    echo 'PRIVATE_KEY=0xYOUR_KEY' > .env");
+    console.log("  ⚠️  NEVER type your private key in a chat.");
+    console.log("  ⚠️  NEVER share your private key with anyone.");
+    console.log("  The .env file is gitignored — stays on your machine only.");
     console.log("=================================================\n");
     return;
   }

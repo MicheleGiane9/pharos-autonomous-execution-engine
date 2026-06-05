@@ -202,7 +202,26 @@ Then open Claude Code and just talk:
 | What you want to do | What you need |
 |--------------------|--------------|
 | Check price, balances, LP range, compare routes | Node.js v18+ (already in VSCode) |
-| Execute swaps, watch + auto-execute | `npm install ethers` + `PRIVATE_KEY` env var |
+| Execute swaps, watch + auto-execute | `npm install ethers` + `.env` file with `PRIVATE_KEY` |
+
+## Security — private key setup
+
+**NEVER type your private key in a chat or AI conversation.**
+
+Store it in a local `.env` file:
+
+```bash
+# 1. Copy the example file
+cp .env.example .env
+
+# 2. Edit .env and paste your key (MetaMask → Account Details → Show Private Key)
+# PRIVATE_KEY=0xYOUR_KEY_HERE
+
+# 3. The script loads it automatically — no export needed
+node scripts/pharos.js swap 10 WPROS USDC
+```
+
+The `.env` file is listed in `.gitignore` — it will never be pushed to GitHub.
 
 ---
 
