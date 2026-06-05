@@ -4,8 +4,8 @@
 
 - **Name:** pharos-autonomous-execution-engine
 - **Version:** 1.0.0
-- **Triggers:** "pharos", "PROS", "PHRS", "WPROS", "faroswap", "swap on pharos", "analyze tx", "best route", "LP range", "out of range", "monitor position", "atlantic-testnet", "pacific-ocean", "rebalance"
-- **Dependencies:** `cast` and `forge` (Foundry toolkit), `node` (for price calculations)
+- **Triggers:** "pharos", "PROS", "PHRS", "WPROS", "faroswap", "swap on pharos", "analyze tx", "best route", "LP range", "out of range", "monitor position", "rebalance", "watch price", "when price drops", "when price rises", "auto-execute", "autonomous", "buy the dip", "portfolio"
+- **Dependencies:** `node` v18+ (for all read operations); `npm install ethers` + `PRIVATE_KEY` (for swap execution)
 - **Networks:** Pharos Mainnet (Chain 1672), Atlantic Testnet (Chain 688689)
 
 ## What This Skill Does
@@ -52,12 +52,34 @@ Before ANY write operation:
 ## Example Invocations
 
 ```
-Agent: "Swap 100 USDC to PROS with best execution"
-Skill: → analyze route → compare DEXs → check gas → execute best path
+Agent: "What is the current WPROS price and gas on Pharos?"
+Skill: → node scripts/pharos.js price
 
-Agent: "Monitor PROS price, buy 50 USDC when it drops 10%"  
-Skill: → set up condition monitor → execute when triggered
+Agent: "Analyze my wallet 0x... on Pharos — what should I do?"
+Skill: → node scripts/pharos.js wallet 0x... → return balances + recommendation
 
-Agent: "Is it safe to borrow 500 USDC against my PROS collateral?"
-Skill: → check collateral ratio → calculate liquidation price → return risk score
+Agent: "Swap 50 WPROS to USDC using best route"
+Skill: → node scripts/pharos.js swap 50 WPROS USDC → pre-analysis → execute
+
+Agent: "Watch price and buy 20 USDC of WPROS when it drops below $0.55"
+Skill: → node scripts/pharos.js watch price-below 0.55 20 USDC WPROS → monitor + auto-execute
+
+Agent: "Compare: should I swap on Faroswap or bridge to Base?"
+Skill: → node scripts/pharos.js compare 40 → return verdict
+
+Agent: "Is my LP position still earning fees? Range: $0.32 — $1.29"
+Skill: → node scripts/pharos.js lp 0x... 0.32 1.29 → return status + alert level
+```
+
+## Autonomous Execution Flow
+
+```
+watch command lifecycle:
+  1. Parse condition (price-below | price-above) + threshold
+  2. Poll getPoolSlot0() every 30s for live price
+  3. Show live feed: price, trend, gas, distance to threshold
+  4. When condition triggered:
+     a. If PRIVATE_KEY set → run cmdSwap() automatically
+     b. If no key → alert with ready-to-execute command
+  5. Stop after execution (one-shot) or continue monitoring
 ```

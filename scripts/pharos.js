@@ -128,7 +128,9 @@ async function cmdWallet(wallet) {
   const { price } = await getPoolSlot0(CONTRACTS.pool_001);
   const gas  = await getGasPrice();
 
-  const total = (pros + wpros) * price + usdc;
+  const prosValue  = (pros + wpros) * price;
+  const total      = prosValue + usdc;
+  const prosRatio  = total > 0 ? prosValue / total * 100 : 0;
 
   console.log("\n=======================================");
   console.log("  WALLET ANALYSIS — PHAROS");
@@ -140,6 +142,24 @@ async function cmdWallet(wallet) {
   console.log(`  Total:  ~$${total.toFixed(2)} USD`);
   console.log(`\n  Price:  $${price.toFixed(4)} USDC/WPROS`);
   console.log(`  Gas:    ${gas} gwei — ${gas <= 15 ? "LOW ✅" : "HIGH ⚠️"}`);
+
+  console.log("\n  ── AGENT RECOMMENDATION ──────────────");
+  if (total === 0) {
+    console.log("  ℹ️  Empty wallet — fund with PROS to start");
+  } else if (prosRatio > 90) {
+    const suggestSell = ((pros + wpros) * 0.3).toFixed(2);
+    console.log(`  ⚠️  ${prosRatio.toFixed(0)}% of portfolio is PROS/WPROS`);
+    console.log("     High concentration risk if price drops.");
+    console.log(`     Suggestion: swap ~${suggestSell} WPROS → USDC to diversify`);
+    console.log(`     node scripts/pharos.js swap ${suggestSell} WPROS USDC`);
+  } else if (prosRatio < 10 && total > 0) {
+    console.log(`  ℹ️  Portfolio is mostly stablecoins (${(100 - prosRatio).toFixed(0)}% USDC)`);
+    console.log("     Suggestion: buy WPROS if you expect price recovery");
+    console.log(`     node scripts/pharos.js compare ${usdc.toFixed(0)}`);
+  } else {
+    console.log(`  ✅  Balanced portfolio (${prosRatio.toFixed(0)}% PROS, ${(100-prosRatio).toFixed(0)}% stable)`);
+  }
+  if (gas <= 10) console.log("  💡 Gas is very low — ideal time to execute transactions");
   console.log("=======================================\n");
 }
 
@@ -295,6 +315,78 @@ async function cmdCompare(amountPROS = 1) {
     console.log(`  VERDICT:      Bridge to ${bestBridge?.chain} for best rate (+${diff} USDC, ~${timeMins} min)`);
   }
   console.log("=================================================\n");
+}
+
+// ─── Autonomous Watch + Execute ──────────────────────────────────────────────
+
+async function cmdWatch(condition, threshold, swapAmount, swapFrom, swapTo) {
+  const thresholdPrice = parseFloat(threshold);
+  if (!condition || isNaN(thresholdPrice)) {
+    console.log("Usage:");
+    console.log("  node scripts/pharos.js watch price-below <price> [amount fromToken toToken]");
+    console.log("  node scripts/pharos.js watch price-above <price> [amount fromToken toToken]");
+    console.log("  Example (alert only):  node scripts/pharos.js watch price-below 0.55");
+    console.log("  Example (auto-execute): node scripts/pharos.js watch price-below 0.55 10 USDC WPROS");
+    return;
+  }
+
+  const hasAction   = swapAmount && swapFrom && swapTo;
+  const hasKey      = !!process.env.PRIVATE_KEY;
+  const condLabel   = condition === "price-below" ? `drops below $${threshold}` : `rises above $${threshold}`;
+  const INTERVAL_MS = 30_000;
+
+  console.log("\n=================================================");
+  console.log("  AUTONOMOUS MONITOR — Pharos Network");
+  console.log("=================================================");
+  console.log(`  Watching:   WPROS price ${condLabel}`);
+  if (hasAction) {
+    console.log(`  Action:     Swap ${swapAmount} ${swapFrom} → ${swapTo}`);
+    console.log(`  Execution:  ${hasKey ? "AUTO ✅  (PRIVATE_KEY set)" : "ALERT ONLY ⚠️  (set PRIVATE_KEY to auto-execute)"}`);
+  } else {
+    console.log("  Mode:       Alert only");
+  }
+  console.log(`  Interval:   every ${INTERVAL_MS / 1000}s  |  Press Ctrl+C to stop`);
+  console.log("=================================================\n");
+
+  let checks = 0;
+  const history = [];
+
+  while (true) {
+    checks++;
+    const { price } = await getPoolSlot0(CONTRACTS.pool_001);
+    const gas = await getGasPrice();
+    history.push(price);
+    if (history.length > 5) history.shift();
+
+    const trend = history.length >= 2
+      ? (history[history.length - 1] > history[0] ? "↑" : "↓")
+      : "–";
+
+    const triggered =
+      (condition === "price-below" && price < thresholdPrice) ||
+      (condition === "price-above" && price > thresholdPrice);
+
+    const icon = triggered ? "🚨" : "👁 ";
+    const time = new Date().toLocaleTimeString();
+    const diff = ((price - thresholdPrice) / thresholdPrice * 100).toFixed(2);
+    const diffLabel = triggered ? "TRIGGERED" : `${Math.abs(diff)}% away`;
+
+    console.log(`  ${icon}  [${time}]  WPROS $${price.toFixed(4)} ${trend}  gas ${gas} gwei  ${diffLabel}  (#${checks})`);
+
+    if (triggered) {
+      console.log("\n  🚨 CONDITION MET — price crossed threshold!\n");
+      if (hasAction && hasKey) {
+        await cmdSwap(swapAmount, swapFrom, swapTo);
+        console.log("  Monitor stopping after execution.\n");
+        break;
+      } else if (hasAction) {
+        console.log(`  ► To execute now: PRIVATE_KEY=0x... node scripts/pharos.js swap ${swapAmount} ${swapFrom} ${swapTo}`);
+        console.log("  Continuing to monitor...\n");
+      }
+    }
+
+    await new Promise(r => setTimeout(r, INTERVAL_MS));
+  }
 }
 
 // ─── Swap via Faroswap SwapRouter ────────────────────────────────────────────
@@ -472,6 +564,7 @@ const [,, cmd, ...args] = process.argv;
     else if (cmd === "bridge")  await cmdBridge(parseFloat(args[0]) || 1);
     else if (cmd === "compare") await cmdCompare(parseFloat(args[0]) || 1);
     else if (cmd === "swap")    await cmdSwap(args[0], args[1] || "WPROS", args[2] || "USDC", parseFloat(args[3]) || 0.5);
+    else if (cmd === "watch")   await cmdWatch(args[0], args[1], args[2], args[3], args[4]);
     else {
       console.log("Usage:");
       console.log("  node scripts/pharos.js price");
@@ -480,8 +573,9 @@ const [,, cmd, ...args] = process.argv;
       console.log("  node scripts/pharos.js bridge <amountPROS>");
       console.log("  node scripts/pharos.js compare <amountPROS>");
       console.log("  node scripts/pharos.js swap <amount> <fromToken> <toToken> [slippage%]");
-      console.log("    Example: node scripts/pharos.js swap 10 WPROS USDC 0.5");
       console.log("    Requires: PRIVATE_KEY env var");
+      console.log("  node scripts/pharos.js watch <price-below|price-above> <price> [amount fromToken toToken]");
+      console.log("    Example: node scripts/pharos.js watch price-below 0.55 10 USDC WPROS");
     }
   } catch (e) {
     console.error("Error:", e.message);

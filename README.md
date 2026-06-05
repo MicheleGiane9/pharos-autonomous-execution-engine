@@ -2,7 +2,7 @@
 
 > Intelligent execution layer for AI agents on Pharos Network.
 
-This skill lets AI agents **analyze, optimize, and execute** onchain actions on Pharos safely — before spending any gas, the agent checks risk, compares routes, and monitors your positions autonomously.
+This skill lets AI agents **analyze, optimize, and execute** onchain actions on Pharos safely — before spending any gas, the agent checks risk, compares routes, monitors positions, and acts autonomously when conditions are met.
 
 ---
 
@@ -10,10 +10,11 @@ This skill lets AI agents **analyze, optimize, and execute** onchain actions on 
 
 | Problem | What this skill does |
 |---------|---------------------|
-| "Is this swap safe right now?" | Simulates the tx, scores risk 1-10, estimates gas before executing |
-| "Am I getting the best price?" | Compares routes on Faroswap to find the optimal path |
-| "Is my LP position still earning fees?" | Monitors your price range and alerts when you're about to exit |
-| "I want an agent to rebalance automatically" | Watches conditions and executes when triggered — no human needed |
+| "Is this swap safe right now?" | Scores risk 1-10, estimates gas, checks balance before executing |
+| "Am I getting the best price?" | Compares Faroswap (2 pools) vs Jumper (5 chains) — picks the winner |
+| "Is my LP position still earning fees?" | Monitors price range and alerts before you go out of range |
+| "Buy WPROS when price drops to $0.55" | Watches price every 30s and auto-executes when triggered |
+| "What should I do with my portfolio?" | Analyzes wallet and gives a concrete recommendation |
 
 ---
 
@@ -30,70 +31,112 @@ cd pharos-autonomous-execution-engine
 ```bash
 node scripts/pharos.js price
 ```
-Expected output:
 ```
-  1 WPROS  =  $0.63 USDC
+  1 WPROS  =  $0.6115 USDC
   Gas:        10 gwei
-  Block:      9384429
+  Block:      9415000
 ```
 
 **Analyze any wallet:**
 ```bash
 node scripts/pharos.js wallet 0xYOUR_WALLET_ADDRESS
 ```
-> Replace `0xYOUR_WALLET_ADDRESS` with any Pharos wallet (e.g. from MetaMask)
-
-Expected output:
 ```
-  PROS:   41.02   (~$25.93)
-  WPROS:   1.08   (~$0.69)
+  PROS:   41.02   (~$25.09)
+  WPROS:   1.08   (~$0.66)
   USDC:    0.00
-  Total:  ~$26.62 USD
+  Total:  ~$25.75 USD
+
+  ── AGENT RECOMMENDATION ──────────────
+  ⚠️  95% of portfolio is PROS/WPROS
+     Suggestion: swap ~12.63 WPROS → USDC to diversify
+     node scripts/pharos.js swap 12.63 WPROS USDC
+  💡 Gas is very low — ideal time to execute transactions
 ```
 
-**Monitor LP position:**
-```bash
-node scripts/pharos.js lp 0xYOUR_WALLET_ADDRESS MIN_PRICE MAX_PRICE
-```
-
-**Compare both Faroswap pools vs Jumper (5 chains):**
+**Compare Faroswap vs Jumper (5 chains):**
 ```bash
 node scripts/pharos.js compare 40
 ```
-Expected output:
 ```
   FAROSWAP — Onchain (stays on Pharos)
-  Pool 0.01%   24.33 USDC  instant  gas ~$0.001  ← best onchain
-  Pool 0.30%   24.27 USDC  instant  gas ~$0.001
+  Pool 0.01%   24.46 USDC  instant  gas ~$0.001  ← best onchain
+  Pool 0.30%   24.40 USDC  instant  gas ~$0.001
 
   JUMPER BRIDGE — Cross-chain (moves to other network)
   Base        24.30 USDC   1080s   gas $0.006  Polymer (Standard)
   Arbitrum    24.30 USDC   1080s   gas $0.006  Polymer (Standard)
-  Polygon     24.30 USDC   1080s   gas $0.006  Polymer (Standard)
-  Ethereum    24.30 USDC   1080s   gas $0.006  Polymer (Standard)
+  ...
 
   BEST PRICE:   Faroswap 0.01%
-  YOU RECEIVE:  24.33 USDC
+  YOU RECEIVE:  24.46 USDC
   VERDICT:      Stay on Pharos — best rate + instant + cheapest gas
+```
+
+**Swap tokens (analyze + execute):**
+```bash
+# Show analysis only (no key needed — safe to run)
+node scripts/pharos.js swap 10 WPROS USDC
+
+# Execute on-chain (needs PRIVATE_KEY)
+export PRIVATE_KEY=0x...
+node scripts/pharos.js swap 10 WPROS USDC
+```
+```
+  PRE-EXECUTION ANALYSIS — Pharos Network
+  Action:      Swap 10 WPROS → USDC
+  Best route:  Faroswap pool 0.01%
+  Est. output: ~6.1152 USDC
+  Min output:  6.0847 USDC (0.5% slippage)
+  Gas price:   10 gwei
+  Risk score:  2/10 — LOW ✅
+
+  Step 1/2: Approving SwapRouter...  ✅
+  Step 2/2: Executing swap...
+  TX hash:   0x...
+  SWAP SUCCESS ✅
+```
+
+**Autonomous monitor — watch + auto-execute:**
+```bash
+# Alert only (no key needed)
+node scripts/pharos.js watch price-below 0.55
+
+# Auto-execute when triggered
+export PRIVATE_KEY=0x...
+node scripts/pharos.js watch price-below 0.55 10 USDC WPROS
+```
+```
+  AUTONOMOUS MONITOR — Pharos Network
+  Watching:   WPROS price drops below $0.55
+  Action:     Swap 10 USDC → WPROS
+  Execution:  AUTO ✅  (PRIVATE_KEY set)
+  Interval:   every 30s  |  Press Ctrl+C to stop
+
+  👁  [14:32:01]  WPROS $0.6115 ↓  gas 10 gwei  10.27% away  (#1)
+  👁  [14:32:31]  WPROS $0.6093 ↓  gas 10 gwei  10.78% away  (#2)
+  🚨  [14:33:01]  WPROS $0.5488 ↓  gas 10 gwei  TRIGGERED    (#3)
+
+  🚨 CONDITION MET — price crossed threshold!
+  Step 1/2: Approving SwapRouter...  ✅
+  Step 2/2: Executing swap...
+  SWAP SUCCESS ✅  Received: 18.22 WPROS
+```
+
+**Monitor LP position:**
+```bash
+node scripts/pharos.js lp 0xYOUR_WALLET 0.32 1.29
+```
+```
+  Status:       ✅  IN_RANGE — earning fees
+  Price now:    $0.61 USDC/WPROS
+  To lower:     44.1% of range
+  Alert if drops 44% → exits range
 ```
 
 **Bridge only (Jumper routes):**
 ```bash
 node scripts/pharos.js bridge 40
-```
-> Replace `MIN_PRICE` and `MAX_PRICE` with your LP range.
-> Find these in Faroswap → Pool → your position → "Min price" and "Max price"
-
-Example:
-```bash
-node scripts/pharos.js lp 0x34e0...9680 0.32 1.29
-```
-Expected output:
-```
-  Status:       ✅  IN_RANGE — earning fees
-  Price now:    $0.63 USDC/WPROS
-  To lower:     48.5% of range
-  Alert if drops 49% → exits range
 ```
 
 ---
@@ -101,12 +144,10 @@ Expected output:
 ## Use with Claude Code (AI agent mode)
 
 ```bash
-# Install this skill (standalone — no other dependency needed)
 npx skills add https://github.com/MicheleGiane9/pharos-autonomous-execution-engine
 ```
 
-> **Optional:** Install the Pharos base skill engine if you also want
-> native `cast`/`forge` commands for deploying contracts:
+> **Optional:** Install the Pharos base skill engine for native `cast`/`forge` commands:
 > ```bash
 > npx skills add https://github.com/PharosNetwork/pharos-skill-engine
 > ```
@@ -115,45 +156,34 @@ Then open Claude Code and just talk:
 
 ```
 "What is the current price of WPROS on Pharos?"
-```
-```
-"Analyze my wallet 0xYOUR_ADDRESS on Pharos"
-```
-```
-"Monitor my LP position on Pharos. Range: min $0.32 max $1.29"
-```
-```
-"Swap 50 USDC for WPROS on Pharos using best route, max 0.5% slippage"
-```
-```
+"Analyze my wallet 0xYOUR_ADDRESS — what should I do?"
+"Compare routes: swap 50 PROS to USDC on Pharos"
+"Swap 10 WPROS to USDC with 0.5% slippage"
+"Watch the price and buy 20 USDC of WPROS when it drops below $0.55"
 "Alert me if my LP position exits its range"
 ```
 
 ---
 
-## Glossary (for new users)
-
-| Term | Meaning |
-|------|---------|
-| **WPROS** | Wrapped PROS — the main token of Pharos Network |
-| **USDC** | USD Coin — a stablecoin pegged to $1 |
-| **LP position** | Liquidity you added to a trading pool to earn fees |
-| **LP range** | The price range where your liquidity is active and earning |
-| **Out of range** | When price moves outside your range — you stop earning fees |
-| **Faroswap** | The main DEX (exchange) on Pharos Network |
-| **AMM V3** | Concentrated liquidity model used by Faroswap pools |
-
----
-
-## Commands (Node.js — no install needed)
+## Commands
 
 | Command | What it does |
 |---------|-------------|
 | `node scripts/pharos.js price` | Live WPROS/USDC price from Faroswap |
-| `node scripts/pharos.js wallet <addr>` | Balances + total portfolio value in USD |
+| `node scripts/pharos.js wallet <addr>` | Balances + USD total + agent recommendation |
 | `node scripts/pharos.js lp <addr> <min> <max>` | LP range status + out-of-range alerts |
 | `node scripts/pharos.js compare <amount>` | Faroswap (2 pools) vs Jumper (5 chains) — best verdict |
 | `node scripts/pharos.js bridge <amount>` | Bridge routes via Jumper across 5 chains |
+| `node scripts/pharos.js swap <amount> <from> <to>` | Pre-execution analysis, then execute swap |
+| `node scripts/pharos.js watch <condition> <price> [amount from to]` | Autonomous monitor — executes when triggered |
+
+### Watch conditions
+| Condition | Description |
+|-----------|-------------|
+| `price-below <N>` | Triggers when WPROS drops below $N |
+| `price-above <N>` | Triggers when WPROS rises above $N |
+
+---
 
 ## Skill modules (Claude Code)
 
@@ -167,15 +197,28 @@ Then open Claude Code and just talk:
 
 ---
 
+## Requirements
+
+| What you want to do | What you need |
+|--------------------|--------------|
+| Check price, balances, LP range, compare routes | Node.js v18+ (already in VSCode) |
+| Execute swaps, watch + auto-execute | `npm install ethers` + `PRIVATE_KEY` env var |
+
+---
+
 ## Live contracts (Mainnet — Chain 1672)
 
 | Contract | Address |
 |----------|---------|
+| Faroswap SwapRouter | `0xf38d34c8382b9079b0f85309578b43b8479Cd875` |
 | Faroswap Router (DODOFeeRouteProxy) | `0xa5ca5fbe34e444f366b373170541ec6902b0f75c` |
 | WPROS/USDC Pool — 0.01% fee | `0x912c9ade24d44d8922f0866d8dcb079f1363f647` |
 | WPROS/USDC Pool — 0.30% fee | `0x4146d192da6428c9e1c243d2a953c625b5765623` |
+| AMM V3 Factory | `0x2c90ccb0b989afa2433f499698451a25744a552b` |
 | WPROS Token | `0x52C48d4213107b20bC583832b0d951FB9CA8F0B0` |
 | USDC Token | `0xC879C018dB60520F4355C26eD1a6D572cdAC1815` |
+
+> All addresses discovered by decoding on-chain bytecode — not copied from docs.
 
 ---
 
@@ -188,17 +231,18 @@ Then open Claude Code and just talk:
 
 ---
 
-## Requirements
+## Glossary
 
-| What you want to do | What you need |
-|--------------------|--------------|
-| Check price, balances, LP range | Node.js v18+ (already in VSCode) |
-| Execute swaps onchain | Foundry + `$PRIVATE_KEY` |
-
-**Install Foundry** (only needed for executing transactions):
-```bash
-curl -L https://foundry.paradigm.xyz | bash && foundryup
-```
+| Term | Meaning |
+|------|---------|
+| **WPROS** | Wrapped PROS — the main token of Pharos Network |
+| **USDC** | USD Coin — a stablecoin pegged to $1 |
+| **LP position** | Liquidity you added to a trading pool to earn fees |
+| **LP range** | The price range where your liquidity is active and earning |
+| **Out of range** | When price moves outside your range — you stop earning fees |
+| **Faroswap** | The main DEX (exchange) on Pharos Network |
+| **AMM V3** | Concentrated liquidity model used by Faroswap pools |
+| **Autonomous monitor** | Agent watches price and executes automatically when condition is met |
 
 ---
 
